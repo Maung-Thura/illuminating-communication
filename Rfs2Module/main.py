@@ -21,11 +21,12 @@ from package.basecomnios import *
 from package.gsensor import *
 from package.rfssensor import *
 from package.thresholdcontroller import *
+import json
+from azure.iot.device import Message
 
 #Test without Azure IoT Edge
 isEdge = False
-#Test without FPGA design
-isReal = False
+
 
 #Model is in public now and it can be searched.
 #https://github.com/Azure/iot-plugandplay-models/tree/main/dtmi/terasic/fcc
@@ -35,9 +36,9 @@ useComponent = True
 #Global Instances at first to support simulations
 control_bridge = None
 data_bridge    = None
-gs = Gsensor(name="gSensor", real=False)
 rfs = RfsSensor(name='rfsSensors',real=False)
 thc = ThresholdController(real=False)
+msg_origin = os.getenv("MSG_ORIGIN")
 
 # PROPERTY TASKS
 async def execute_property_listener(client):
@@ -75,8 +76,9 @@ async def main():
         print("IoT Hub Client for Python")
         logger.debug('DEBUG ::: Check {}'.format(hostname))
         delay = 10
+        lux_threshold = 10
         watchdog_task  = None
-        global isEdge, isReal, control_bridge, data_bridge, gs, rfs, thc
+        global isEdge, control_bridge, data_bridge, rfs, thc, msg_origin
         
         if "IOTEDGE_IOTHUBHOSTNAME" in os.environ:
             isEdge = True
@@ -132,11 +134,9 @@ async def main():
         await client.connect()
 
         if(hostname in 'de10nano'):
-            gs = Gsensor(name='gSensor',real=True)
             bridges = get_nios_status(hostname)
             if ( bridges[0] is not None ) : 
                 logger.debug('DEBUG ::: The FPGA is ready!')
-                isReal = True
                 control_bridge = bridges[0]
                 data_bridge = bridges[1]
                 rfs = RfsSensor(name='rfsSensors',real=True,offset=0x40100)
@@ -147,18 +147,7 @@ async def main():
         init_patch= {
             'thresholdProperty': {
                 '__t': 'c',
-                'lux': { 'min': 0, 'max': 1000},
-                'humidity': { 'min': 0, 'max': 49.9},
-                'temperature': { 'min': 0, 'max': 42.3},
-                'ax': { 'min': -100, 'max': 100},
-                'ay': { 'min': -100, 'max': 100},
-                'az': { 'min': -100, 'max': 100},
-                'gx': { 'min': -10, 'max': 10},
-                'gy': { 'min': -10, 'max': 10},
-                'gz': { 'min': -10, 'max': 10},
-                'mx': { 'min': -100, 'max': 100},
-                'my': { 'min': -100, 'max': 100},
-                'mz': { 'min': -100, 'max': 100}
+                'lux': { 'min': 0, 'max': 1000}
             },
             "$version": 1
         }
@@ -171,29 +160,15 @@ async def main():
         )
 
         async def send_telemetry():
-            print(f'Sending telemetry from the provisioned device every {delay} seconds')
+            print(f'Sending lux telemetry from the provisioned device every {delay} seconds')
             while True:
                 try :
-                    if(isReal) :
-                        gs_data = gs.get_telemetries()
-                        rfs_data = rfs.get_telemetries(data_bridge)
-                    else : 
-                        gs_data = {"gSensor": {'x': thc.generate_module_dummy_value('X'), 'y': thc.generate_module_dummy_value('Y'), 'z':thc.generate_module_dummy_value('Z')}}
-                        rfs_data = {
-                            'lux':thc.generate_module_dummy_value('lux'),
-                            'humidity':thc.generate_module_dummy_value('humidity'), 'temperature':thc.generate_module_dummy_value('temperature'),
-                            'mpu9250': {
-                                'ax':thc.generate_module_dummy_value('ax'), 'ay':thc.generate_module_dummy_value('ay'), 'az':thc.generate_module_dummy_value('az'),
-                                'gx':thc.generate_module_dummy_value('gx'), 'gy':thc.generate_module_dummy_value('gy'), 'gz':thc.generate_module_dummy_value('gz'),
-                                'mx':thc.generate_module_dummy_value('mx'), 'my':thc.generate_module_dummy_value('my'), 'mz':thc.generate_module_dummy_value('mz')
-                            }
-                        }
-                    msg = gs.create_component_telemetry(gs_data)
-                    await client.send_message(msg)
-                    logger.debug(f'Sent message: {msg}')
-                    msg = rfs.create_component_telemetry(rfs_data)
-                    logger.debug(f'Sent message: {msg}')
-                    await client.send_message(msg)
+                    rfs_data = rfs.get_telemetries(data_bridge)
+                    lux_value = rfs_data.get('lux')
+                    if(lux_value >= lux_threshold):
+                        msg = rfs.create_component_telemetry(generate_lux_message(lux_value, msg_origin))
+                        logger.debug(f'Sent message: {str(msg)}')
+                        await client.send_message(msg)
                 
                 finally :
                     await asyncio.sleep(delay)
@@ -232,6 +207,23 @@ async def main():
     except Exception as e:
         print("Unexpected error %s " % e)
         raise
+
+def generate_lux_message(lux_value, msg_origin):
+    payload = {
+           "notify": "true",
+           "lux": lux_value,
+           "from": msg_origin 
+        }
+    
+    print(payload)
+
+    # Create Message object
+    message = Message(str(payload))  # Payload must be serialized (e.g., as a JSON string)
+    message.content_type="application/JSON"
+    message.content_encoding="UTF-8"
+
+    return message
+
 
 if __name__ == "__main__":
     # If using Python 3.7 or above, you can use following code instead:

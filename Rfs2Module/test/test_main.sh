@@ -7,4 +7,5 @@
 #export IOTHUB_DEVICE_DPS_DEVICE_KEY=""
 
 export IOTHUB_DEVICE_SECURITY_TYPE="connectionString"
-export IOTHUB_DEVICE_CONNECTION_STRING="HostName=maung-thu-ra-hub.azure-devices.net;DeviceId=de10nano-mthura;SharedAccessKey=eTjcn/zI451i8e+D1x7DpQM8d0QzvQ2Ts2uhC9KmigA="
+export IOTHUB_DEVICE_CONNECTION_STRING="ChangeMe"
+export MSG_ORIGIN="2145 Sheridan Rd 60208"
