@@ -166,7 +166,8 @@ async def main():
                     rfs_data = rfs.get_telemetries(data_bridge)
                     lux_value = rfs_data.get('lux')
                     if(lux_value >= lux_threshold):
-                        msg = rfs.create_component_telemetry(generate_lux_message(lux_value, msg_origin))
+                        print('lux value received: ' + str(lux_value))
+                        msg = generate_lux_message(lux_value, msg_origin)
                         logger.debug(f'Sent message: {str(msg)}')
                         await client.send_message(msg)
                 
@@ -209,16 +210,14 @@ async def main():
         raise
 
 def generate_lux_message(lux_value, msg_origin):
-    payload = {
-           "notify": "true",
-           "lux": lux_value,
-           "from": msg_origin 
-        }
+    payload =  {
+                    "lux": lux_value,
+                    "from": msg_origin,
+                    "notify": True    
+               } 
     
-    print(payload)
-
     # Create Message object
-    message = Message(str(payload))  # Payload must be serialized (e.g., as a JSON string)
+    message = Message(json.dumps(payload, indent=2))  # Payload must be serialized (e.g., as a JSON string)
     message.content_type="application/JSON"
     message.content_encoding="UTF-8"
 
