@@ -1,0 +1,26 @@
+import json
+import base64
+from lux_translator import lux_to_morse, morse_to_text
+
+# Decode the base64-encoded request body
+encoded_body = "eyJpZCI6IjM1NWM4NzEwLTk0ODAtMWUzZC01OGM4LWIzMTcyMDViNzBhMSIsInRvcGljIjoiL1NVQlNDUklQVElPTlMvMkMyOEUwNDUtOUVCNS00QTQyLUJEMzctNjhGNjdFMzBGOTU5L1JFU09VUkNFR1JPVVBTL01BVU5HX1RIVV9SQV9SRVNPVVJDRVMvUFJPVklERVJTL01JQ1JPU09GVC5ERVZJQ0VTL0lPVEhVQlMvTUFVTkctVEhVLVJBLUhVQiIsInN1YmplY3QiOiJkZXZpY2VzL2RlMTBuYW5vLW10aHVyYSIsImV2ZW50VHlwZSI6Ik1pY3Jvc29mdC5EZXZpY2VzLkRldmljZVRlbGVtZXRyeSIsImRhdGEiOnsicHJvcGVydGllcyI6e30sInN5c3RlbVByb3BlcnRpZXMiOnsiaW90aHViLWNvbnRlbnQtdHlwZSI6ImFwcGxpY2F0aW9uL0pTT04iLCJpb3RodWItY29udGVudC1lbmNvZGluZyI6IlVURi04IiwiaW90aHViLWNvbm5lY3Rpb24tZGV2aWNlLWlkIjoiZGUxMG5hbm8tbXRodXJhIiwiaW90aHViLWNvbm5lY3Rpb24tYXV0aC1tZXRob2QiOiJ7XCJzY29wZVwiOlwiZGV2aWNlXCIsXCJ0eXBlXCI6XCJzYXNcIixcImlzc3VlclwiOlwiaW90aHViXCJ9IiwiaW90aHViLWNvbm5lY3Rpb24tYXV0aC1nZW5lcmF0aW9uLWlkIjoiNjM4NjQyMDUzNjQxODIzOTQ5IiwiaW90aHViLWVucXVldWVkdGltZSI6IjIwMjQtMTEtMzBUMDY6NDg6MjYuNzI3MDAwMFoiLCJpb3RodWItbWVzc2FnZS1zb3VyY2UiOiJUZWxlbWV0cnkiLCJkdC1kYXRhc2NoZW1hIjoiZHRtaTpUZXJhc2ljOkZDQzpERTEwX05hbm87MSJ9LCJib2R5Ijp7Imx1eF92YWx1ZXMiOlsxNTkuMDkzOTk0MTQwNjI1LDE2My43MzU5OTI0MzE2NDA2MiwxMTkuNDI2MDAyNTAyNDQxNCwyOC4yNzQwMDAxNjc4NDY2OCwzNi43MTQwMDA3MDE5MDQzLDI0LjA1NDAwMDg1NDQ5MjE4OCw2Ny4wOTc5OTk1NzI3NTM5LDE1OS41MTYwMDY0Njk3MjY1NiwzNC4xODE5OTkyMDY1NDI5NywxOTAuNzQ0MDAzMjk1ODk4NDQsNDQuMzEwMDAxMzczMjkxMDE2LDU1LjcwMzk5ODU2NTY3MzgzLDMyLjQ5Mzk5OTQ4MTIwMTE3XSwiZnJvbSI6IjIxNDUgU2hlcmlkYW4gUmQgNjAyMDgiLCJub3RpZnkiOnRydWV9fSwiZGF0YVZlcnNpb24iOiIiLCJtZXRhZGF0YVZlcnNpb24iOiIxIiwiZXZlbnRUaW1lIjoiMjAyNC0xMS0zMFQwNjo0ODoyNi43MjdaIn0="
+decoded_body = base64.b64decode(encoded_body).decode('utf-8')  # Decode from base64
+print(f"Decoded body: {decoded_body}")
+
+# Parse the decoded body as JSON
+request_json = json.loads(decoded_body)
+print(f"Parsed JSON: {request_json}")
+
+lux_values = request_json.get('data', {}).get('body', {}).get('lux_values')
+if not lux_values:
+    raise ValueError("No lux_values provided.")
+
+msg_origin = request_json.get('data', {}).get('body', {}).get('from')
+
+# Convert lux values to Morse code
+morse_code = lux_to_morse(lux_values)
+print(f"Morse Code: {morse_code}")
+
+# Translate Morse code to English text
+english_text = morse_to_text(morse_code)
+print(f"Translated Text: {english_text}")

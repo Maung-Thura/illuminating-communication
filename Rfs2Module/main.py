@@ -21,8 +21,10 @@ from package.basecomnios import *
 from package.gsensor import *
 from package.rfssensor import *
 from package.thresholdcontroller import *
+from package.countdown_timer import CountdownTimer
 import json
 from azure.iot.device import Message
+from queue import Queue, Empty
 
 #Test without Azure IoT Edge
 isEdge = False
@@ -39,6 +41,11 @@ data_bridge    = None
 rfs = RfsSensor(name='rfsSensors',real=False)
 thc = ThresholdController(real=False)
 msg_origin = os.getenv("MSG_ORIGIN")
+msg_holding_interval = int(os.getenv("MSG_HOLDING_INTERVAL_IN_SECONDS"))
+msg_max_length = int(os.getenv("MSG_MAX_LENGTH"))
+
+countdown_timer: CountdownTimer = None
+lux_queue = Queue()  # Thread-safe queue
 
 # PROPERTY TASKS
 async def execute_property_listener(client):
@@ -75,10 +82,10 @@ async def main():
                 "The sample requires python 3.5.3+. Current version of Python: %s" % sys.version)
         print("IoT Hub Client for Python")
         logger.debug('DEBUG ::: Check {}'.format(hostname))
-        delay = 10
+        delay = 5
         lux_threshold = 10
         watchdog_task  = None
-        global isEdge, control_bridge, data_bridge, rfs, thc, msg_origin
+        global isEdge, control_bridge, data_bridge, rfs, thc, msg_origin, countdown_timer, msg_holding_interval, msg_max_length
         
         if "IOTEDGE_IOTHUBHOSTNAME" in os.environ:
             isEdge = True
@@ -159,18 +166,36 @@ async def main():
             execute_property_listener(client)
         )
 
+        async def send_lux_values():
+            try:   
+                lux_values = get_all_items_non_blocking(lux_queue)
+                msg = generate_lux_message(lux_values, msg_origin)
+                logger.debug(f'Sent message: {str(msg)}')
+                await client.send_message(msg)
+            except Exception as e:
+                    print(e)
+
         async def send_telemetry():
             print(f'Sending lux telemetry from the provisioned device every {delay} seconds')
+            global countdown_timer
             while True:
                 try :
                     rfs_data = rfs.get_telemetries(data_bridge)
                     lux_value = rfs_data.get('lux')
                     if(lux_value >= lux_threshold):
                         print('lux value received: ' + str(lux_value))
-                        msg = generate_lux_message(lux_value, msg_origin)
-                        logger.debug(f'Sent message: {str(msg)}')
-                        await client.send_message(msg)
-                
+                        lux_queue.put(lux_value)
+                        if countdown_timer is None:
+                            countdown_timer = CountdownTimer(msg_holding_interval, send_lux_values)
+                            countdown_timer.start()
+                        elif lux_queue.qsize() >= msg_max_length:
+                            countdown_timer.stop() 
+                            await send_lux_values()
+                        elif not countdown_timer.running:
+                            countdown_timer = CountdownTimer(msg_holding_interval, send_lux_values)
+                            countdown_timer.start()
+                except Exception as e:
+                    print(e)
                 finally :
                     await asyncio.sleep(delay)
         send_telemetry_task = asyncio.create_task(send_telemetry())
@@ -183,6 +208,7 @@ async def main():
                     selection = input()
                     if selection == "Q" or selection == "q":
                         print("Quitting...")
+                        countdown_timer.join()  # Wait for the countdown to finish
                         break
                 except:
                     time.sleep(delay)
@@ -209,9 +235,9 @@ async def main():
         print("Unexpected error %s " % e)
         raise
 
-def generate_lux_message(lux_value, msg_origin):
+def generate_lux_message(lux_values:list, msg_origin:str) -> Message:
     payload =  {
-                    "lux": lux_value,
+                    "lux_values": lux_values,
                     "from": msg_origin,
                     "notify": True    
                } 
@@ -223,6 +249,15 @@ def generate_lux_message(lux_value, msg_origin):
 
     return message
 
+# Non-blocking retrieval of all items
+def get_all_items_non_blocking(queue) -> list:
+    items = []
+    while True:
+        try:
+            items.append(queue.get_nowait())  # Non-blocking get
+        except Empty:
+            break
+    return items
 
 if __name__ == "__main__":
     # If using Python 3.7 or above, you can use following code instead:
