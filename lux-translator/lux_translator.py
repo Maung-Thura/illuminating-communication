@@ -52,7 +52,7 @@ def lux_to_morse(lux_values):
     for lux in lux_values:
         if lux > 100:
             morse_code += "."
-        elif lux > 40:
+        elif lux > 10:
             morse_code += "-"
         else:
             morse_code += " "
